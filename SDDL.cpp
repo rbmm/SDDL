@@ -68,10 +68,17 @@ public:
 	}
 };
 
+struct RegEdit_HexData
+{
+	ULONG cb;
+	CHAR buf[];
+};
+
 class SDialog : public LSA_LOOKUP, VDbgPrint
 {
 	HFONT _hFont;
 	HICON _hi[2];
+	HWND _hwnd[2];
 
 	INT_PTR OnInitDialog(HWND hwndDlg);
 
@@ -96,6 +103,101 @@ class SDialog : public LSA_LOOKUP, VDbgPrint
 
 		return 0;
 	}
+
+	BOOL FixClipData()
+	{
+		ULONG f = 0;
+		while (f = EnumClipboardFormats(f))
+		{
+			WCHAR name[sizeof("RegEdit_HexData")];
+			if (GetClipboardFormatNameW(f, name, _countof(name)) && !wcscmp(L"RegEdit_HexData", name))
+			{
+				if (HANDLE h = GetClipboardData(f))
+				{
+					SIZE_T s = GlobalSize(h);
+
+					if (s > sizeof(RegEdit_HexData) + 3)
+					{
+						union {
+							RegEdit_HexData* p;
+							PVOID pv;
+						};
+
+						if (pv = GlobalLock(h))
+						{
+							if (p->cb + 3 + sizeof(RegEdit_HexData) == s && RtlValidSecurityDescriptor(p->buf))
+							{
+								if (InitBuf(MAXUSHORT+1))
+								{
+									DumpSecurityDescriptor(p->buf);
+									SetToWnd(_hwnd[0]);
+								}
+
+								PWSTR psz;
+								if (ConvertSecurityDescriptorToStringSecurityDescriptorW(p->buf, 
+									SDDL_REVISION, 
+									DACL_SECURITY_INFORMATION|
+									SACL_SECURITY_INFORMATION|
+									LABEL_SECURITY_INFORMATION|
+									OWNER_SECURITY_INFORMATION|
+									GROUP_SECURITY_INFORMATION, &psz, 0))
+								{
+									SetWindowTextW(_hwnd[1], psz);
+									LocalFree(psz);
+								}
+							}
+
+							GlobalUnlock(h);
+						}
+					}
+				}
+
+				return TRUE;
+			}
+		}
+
+		return FALSE;
+	}
+
+	static LRESULT CALLBACK sSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam,
+		LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData)
+	{
+		switch (uIdSubclass)
+		{
+		case IDC_EDIT2:
+			switch (uMsg)
+			{
+			case WM_CONTEXTMENU:
+				if (OpenClipboard(hWnd))
+				{
+					BOOL b = reinterpret_cast<SDialog*>(dwRefData)->FixClipData();
+					if (b) EmptyClipboard();
+					CloseClipboard();
+					if (b)
+					{
+						return 0;
+					}
+				}
+				break;
+			}
+			break;
+		case IDC_EDIT1:
+			switch (uMsg)
+			{
+			case WM_GETDLGCODE:
+				return DLGC_WANTCHARS|DLGC_HASSETSEL|DLGC_WANTALLKEYS|DLGC_WANTARROWS;
+			}
+			break;
+		default:
+			__debugbreak();
+		}
+
+		if (uMsg == WM_NCDESTROY)
+		{
+			RemoveWindowSubclass(hWnd, sSubclassProc, uIdSubclass);
+		}
+		return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+	}
 public:
 	SDialog () : LSA_LOOKUP(*static_cast<VDbgPrint*>(this)), _hi{}, _hFont(0)
 	{
@@ -109,9 +211,9 @@ public:
 
 void SDialog::OnDestroy()
 {
-	if (_hFont)
+	if (HFONT hFont = _hFont)
 	{
-		DeleteObject(_hFont);
+		DeleteObject(hFont);
 	}
 
 	int i = _countof(_hi);
@@ -126,6 +228,8 @@ void SDialog::OnDestroy()
 
 INT_PTR SDialog::OnInitDialog(HWND hwndDlg)
 {
+	SetWindowSubclass(GetDlgItem(hwndDlg, IDC_EDIT1), sSubclassProc, IDC_EDIT1, (ULONG_PTR)this);
+	SetWindowSubclass(GetDlgItem(hwndDlg, IDC_EDIT2), sSubclassProc, IDC_EDIT2, (ULONG_PTR)this);
 	NTSTATUS status = Init();
 	if (0 > status)
 	{
@@ -164,6 +268,9 @@ INT_PTR SDialog::OnInitDialog(HWND hwndDlg)
 			SendMessageW(GetDlgItem(hwndDlg, IDC_EDIT1), WM_SETFONT, (WPARAM)_hFont, 0);
 		}
 	}
+
+	_hwnd[0] = GetDlgItem(hwndDlg, IDC_EDIT1);
+	_hwnd[1] = GetDlgItem(hwndDlg, IDC_EDIT2);
 
 	return 0;
 }
