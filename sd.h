@@ -6,6 +6,8 @@ public:
 	virtual VPrint& operator ()(PCWSTR format, ...) = 0;
 };
 
+void PrintBin(VPrint& log, PULONG pu, ULONG s);
+
 class LSA_LOOKUP
 {
 	LSA_HANDLE PolicyHandle;

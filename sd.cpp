@@ -244,7 +244,7 @@ NTSTATUS LSA_LOOKUP::DumpACEList(ULONG AceCount, PVOID FirstAce)
 		}
 
 		ACCESS_MASK Mask = pah->Mask;
-		swprintf_s(sz2, L"%08X", Mask);
+		swprintf_s(sz2, _countof(sz2), L"%08X", Mask);
 
 		switch (pah->Header.AceType)
 		{
@@ -268,7 +268,7 @@ NTSTATUS LSA_LOOKUP::DumpACEList(ULONG AceCount, PVOID FirstAce)
 			sz2[3] = 0;
 			break;
 		default:
-			swprintf_s(sz, L"0x%x", pah->Header.AceType);
+			swprintf_s(sz, _countof(sz2), L"0x%x", pah->Header.AceType);
 		}
 
 		if (0 > RtlConvertSidToUnicodeString(&StringSid, Sid, TRUE))
@@ -347,14 +347,36 @@ void LSA_LOOKUP::DumpSecurityDescriptor(PSECURITY_DESCRIPTOR SecurityDescriptor)
 	}
 }
 
+void PrintBin(VPrint& log, PULONG pu, ULONG s)
+{
+	if (s >>= 2)
+	{
+		log(L"\r\nstatic const ULONG _s_sd[] = {");
+		int i = 0;
+		do 
+		{
+			if (!(i++ & 3))
+			{
+				log(L"\r\n\t");
+			}
+			log(L"0x%08x, ", *pu++);
+		} while (--s);
+		log(L"\r\n};\r\n");
+	}
+}
+
 void LSA_LOOKUP::DumpStringSecurityDescriptor(PCWSTR StringSecurityDescriptor)
 {
 	PSECURITY_DESCRIPTOR SecurityDescriptor;
 
+	ULONG s;
 	if (ConvertStringSecurityDescriptorToSecurityDescriptorW(
-		StringSecurityDescriptor, SDDL_REVISION, &SecurityDescriptor, 0))
+		StringSecurityDescriptor, SDDL_REVISION, &SecurityDescriptor, &s))
 	{
 		DumpSecurityDescriptor(SecurityDescriptor);
+
+		PrintBin(log, (PULONG)SecurityDescriptor, s);
+
 		LocalFree(SecurityDescriptor);
 	}
 	else

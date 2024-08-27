@@ -130,6 +130,7 @@ class SDialog : public LSA_LOOKUP, VDbgPrint
 								if (InitBuf(MAXUSHORT+1))
 								{
 									DumpSecurityDescriptor(p->buf);
+									PrintBin(*this, (PULONG)p->buf, RtlLengthSecurityDescriptor(p->buf));
 									SetToWnd(_hwnd[0]);
 								}
 
@@ -318,9 +319,11 @@ INT_PTR SDialog::DialogProc(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM /*lPa
 	}
 	return 0;
 }
-
+void TYER(PCWSTR pszLib);
+//#define _PRINT_CPP_NAMES_
 void WINAPI ep(void*)
 {
+	//TYER(L"C:\\Users\\Harry\\AppData\\Local\\NetBet Poker\\data\\_pokerlobbywidget.dll");
 	{
 		SDialog dlg;
 		dlg.DoModal();
